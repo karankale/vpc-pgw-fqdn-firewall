@@ -1,0 +1,95 @@
+#!/bin/bash
+
+set -ex
+
+apt-get update
+apt-get -y upgrade
+
+apt-get -y install \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release \
+    apt-transport-https \
+    software-properties-common \
+    squid-openssl
+
+
+echo "vm.max_map_count=262144" >> /etc/sysctl.conf
+echo "fs.inotify.max_user_instances=8192" >> /etc/sysctl.conf
+echo "fs.inotify.max_user_watches=524288" >> /etc/sysctl.conf
+
+sysctl vm.max_map_count=262144
+sysctl fs.inotify.max_user_instances=8192
+sysctl fs.inotify.max_user_watches=524288
+sysctl -p
+
+# Create squid configuration
+mkdir -p /etc/squid
+
+[ -f /etc/squid/squid.conf ] && mv /etc/squid/squid.conf /etc/squid/squid.conf.original
+
+SSLCRTDDB=/var/lib/ssl_db
+/usr/lib/squid/security_file_certgen -c -s $SSLCRTDDB -M 16MB
+chown proxy:proxy $SSLCRTDDB
+
+cat | tee /etc/squid/squid.conf <<EOF
+visible_hostname squid
+
+sslcrtd_program /usr/lib/squid/security_file_certgen -s /var/lib/ssl_db -M 16MB
+sslcrtd_children 10
+
+# Define ports
+http_port 3128
+http_port 3129 intercept
+https_port 3130 intercept ssl-bump generate-host-certificates=on \
+    dynamic_cert_mem_cache_size=4MB \
+    cert=/etc/squid/ssl/squid.pem \
+    key=/etc/squid/ssl/squid.key
+
+# Allowlist configuration
+%{ for domain in allowlist ~}
+acl allowed_http_sites dstdomain ${domain}
+%{ endfor ~}
+http_access allow allowed_http_sites
+
+%{ for domain in allowlist ~}
+acl allowed_https_sites ssl::server_name ${domain}
+%{ endfor ~}
+
+# SSL Bump configuration
+acl SSL_port port 443
+http_access allow SSL_port
+acl step1 at_step SslBump1
+acl step2 at_step SslBump2
+acl step3 at_step SslBump3
+ssl_bump peek step1 all
+ssl_bump peek step2 allowed_https_sites
+ssl_bump splice step3 allowed_https_sites
+ssl_bump terminate step2 all
+
+# Logging
+access_log /var/log/squid/access.log squid
+cache_log /var/log/squid/cache.log
+
+http_access deny all
+EOF
+
+
+# Create certificates for SSL peek
+mkdir /etc/squid/ssl && cd /etc/squid/ssl
+openssl genrsa -out squid.key 2048
+openssl req -new -key squid.key -out squid.csr -subj "/C=XX/ST=XX/L=squid/O=squid/CN=squid"
+openssl x509 -req -days 3650 -in squid.csr -signkey squid.key -out squid.crt
+cat squid.key squid.crt | tee squid.pem
+
+# Allow access to uid 31 (squid in container, unknown on host) to /var/log/squid/
+mkdir -p /var/log/squid
+
+systemctl restart squid
+
+# Route inbound traffic into squid
+%{ for addressprefix in addressprefixes ~}
+iptables -t nat -I PREROUTING 1 -s ${addressprefix} -p tcp --dport 80 -j REDIRECT --to-port 3129
+iptables -t nat -I PREROUTING 1 -s ${addressprefix} -p tcp --dport 443 -j REDIRECT --to-port 3130
+%{ endfor ~}
