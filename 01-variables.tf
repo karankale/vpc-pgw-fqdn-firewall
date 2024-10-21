@@ -5,7 +5,12 @@ variable "ibmcloud_api_key" {
 variable "region" {
   type = string
 }
+
 variable "resource_group_name" {
+  type = string
+}
+
+variable "resource_group_id" {
   type = string
 }
 
@@ -32,3 +37,7 @@ variable "ssh_public_key" {
   type = string
 }
 
+variable "vpc_id" {
+  description = "The ID of the existing VPC"
+  type        = string
+}
