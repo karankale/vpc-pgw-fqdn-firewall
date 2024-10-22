@@ -140,26 +140,29 @@ resource "ibm_is_instance" "squid" {
 #   priority      = 4
 # }
 
-resource "ibm_is_vpc_routing_table" "custom_rt" {
-  vpc  = data.ibm_is_vpc.existing_vpc.id
-  name = "${var.resource_prefix}-custom-rt"
-}
+# resource "ibm_is_vpc_routing_table" "custom_rt" {
+#   vpc  = data.ibm_is_vpc.existing_vpc.id
+#   name = "${var.resource_prefix}-custom-rt"
+# }
 
-resource "ibm_is_vpc_routing_table_route" "custom_default_route" {
-  vpc           = data.ibm_is_vpc.existing_vpc.id
-  routing_table = ibm_is_vpc_routing_table.custom_rt.id
-  zone          = "${var.region}-1"
-  name          = "custom-default-route"
-  destination   = "0.0.0.0/0"
-  action        = "deliver"
-  next_hop      = ibm_is_subnet_reserved_ip.squid_reserved_ip.address
-  priority      = 1
-}
+# resource "ibm_is_vpc_routing_table_route" "custom_default_route" {
+#   vpc           = data.ibm_is_vpc.existing_vpc.id
+#   # routing_table = ibm_is_vpc_routing_table.custom_rt.id
+#   routing_table = "r010-9fa28615-fc2c-46f1-80ae-30df814ea1a1" # fix needed
+#   zone          = "${var.region}-1"
+#   name          = "custom-default-route"
+#   destination   = "0.0.0.0/0"
+#   action        = "deliver"
+#   next_hop      = ibm_is_subnet_reserved_ip.squid_reserved_ip.address
+#   priority      = 1
+# }
 
-resource "ibm_is_subnet_routing_table_attachment" "associate_custom_rt" {
-  subnet        = ibm_is_subnet.subnet_zone1_internal.id
-  routing_table = ibm_is_vpc_routing_table.custom_rt.id
-}
+# resource "ibm_is_subnet_routing_table_attachment" "associate_custom_rt" {
+#   depends_on = [ibm_is_vpc_routing_table.custom_rt]
+#   subnet        = ibm_is_subnet.subnet_zone1_internal.id
+#   # routing_table = ibm_is_vpc_routing_table.custom_rt.id
+#   routing_table = "r010-9fa28615-fc2c-46f1-80ae-30df814ea1a1" # fix needed
+# }
 
 resource "ibm_is_vpn_server_route" "vpn_server_roks_api_route" {
   vpn_server  = ibm_is_vpn_server.vpn_server.id
@@ -373,3 +376,12 @@ resource "ibm_is_security_group_rule" "allow_incomming_for_vpn" {
 output "vpn_server_certificate_crn" {
   value = ibm_sm_private_certificate.vpn_server.crn
 }
+
+# output "vpn_routing_table"{
+#   value = ibm_is_vpc_routing_table.custom_rt.id
+# }
+
+output "subnet" {
+ value =  ibm_is_subnet.subnet_zone1_internal.id
+}
+  # routing_table = ibm_is_vpc_routing_table.custom_rt.id
