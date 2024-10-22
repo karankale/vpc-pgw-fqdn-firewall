@@ -41,3 +41,8 @@ variable "vpc_id" {
   description = "The ID of the existing VPC"
   type        = string
 }
+
+variable "secret_manager_instance" {
+  description = "The Name of the secret manager instance to use"
+  type        = string
+}
