@@ -26,46 +26,46 @@ resource "ibm_is_vpc_address_prefix" "address_prefix_zone_1" {
     name = "${var.resource_prefix}-address-prefix-${var.resource_suffix}-z1"
     zone = "${var.region}-1"
     vpc  = data.ibm_is_vpc.existing_vpc.id
-    cidr = "10.30.0.0/16"
+    cidr = "10.40.0.0/16"
 }
 
-resource "ibm_is_subnet" "subnet_zone1_internal" {
-    depends_on = [
-      ibm_is_vpc_address_prefix.address_prefix_zone_1
-    ]
-    name            = "${var.resource_prefix}-subnet-${var.resource_suffix}-z1-internal"
-    vpc             = data.ibm_is_vpc.existing_vpc.id
-    zone            = "${var.region}-1"
-    ipv4_cidr_block = "10.30.10.0/24"
-    routing_table   = data.ibm_is_vpc.existing_vpc.default_routing_table
-}
+# resource "ibm_is_subnet" "subnet_zone1_internal" {
+#     depends_on = [
+#       ibm_is_vpc_address_prefix.address_prefix_zone_1
+#     ]
+#     name            = "${var.resource_prefix}-subnet-${var.resource_suffix}-z1-internal"
+#     vpc             = data.ibm_is_vpc.existing_vpc.id
+#     zone            = "${var.region}-1"
+#     ipv4_cidr_block = "10.40.10.0/24"
+#     routing_table   = data.ibm_is_vpc.existing_vpc.default_routing_table
+# }
 
-resource "ibm_is_vpc_routing_table" "rt_zone1_external" {
-  vpc   = data.ibm_is_vpc.existing_vpc.id
-  name  = "${var.resource_prefix}-vpc-${var.resource_suffix}-external-rt"
-}
+# resource "ibm_is_vpc_routing_table" "rt_zone1_external" {
+#   vpc   = data.ibm_is_vpc.existing_vpc.id
+#   name  = "${var.resource_prefix}-vpc-${var.resource_suffix}-external-rt"
+# }
 
-resource "ibm_is_subnet" "subnet_zone1_external" {
+resource "ibm_is_subnet" "squid_external_subnet" {
     depends_on = [
       ibm_is_vpc_address_prefix.address_prefix_zone_1
     ]
     name            = "${var.resource_prefix}-subnet-${var.resource_suffix}-z1-external"
     vpc             = data.ibm_is_vpc.existing_vpc.id
     zone            = "${var.region}-1"
-    ipv4_cidr_block = "10.30.20.0/24"
-    routing_table   = ibm_is_vpc_routing_table.rt_zone1_external.routing_table
+    ipv4_cidr_block = "10.40.10.0/24"
+    routing_table   = data.ibm_is_vpc.existing_vpc.default_routing_table
 }
 
-resource "ibm_is_public_gateway" "public_gateway_z1" {
-  name = "${var.resource_prefix}-public-gw-${var.resource_suffix}-z1"
+resource "ibm_is_public_gateway" "public_gateway" {
+  name = "${var.resource_prefix}-public-gw-${var.resource_suffix}"
   resource_group = data.ibm_resource_group.existing_resource_group.id
   vpc  = data.ibm_is_vpc.existing_vpc.id
   zone = "${var.region}-1"
 }
 
-resource "ibm_is_subnet_public_gateway_attachment" "public_gateway_z1_external_subnet_attachment" {
-  subnet                = ibm_is_subnet.subnet_zone1_external.id
-  public_gateway         = ibm_is_public_gateway.public_gateway_z1.id
+resource "ibm_is_subnet_public_gateway_attachment" "public_gateway_squid_external_subnet_attachment" {
+  subnet                = ibm_is_subnet.squid_external_subnet.id
+  public_gateway         = ibm_is_public_gateway.public_gateway.id
 }
 
 
@@ -82,8 +82,8 @@ data "ibm_is_image" "ubuntu" {
 }
 
 resource "ibm_is_subnet_reserved_ip" "squid_reserved_ip" {
-    subnet      = ibm_is_subnet.subnet_zone1_external.id
-    address     = "10.30.20.5"
+    subnet      = ibm_is_subnet.squid_external_subnet.id
+    address     = "10.40.10.5"
     name        = "squid-reserved-ip"
 }
 
@@ -96,7 +96,7 @@ resource "ibm_is_virtual_network_interface" "squid_vni"{
         auto_delete       = false
         reserved_ip       = ibm_is_subnet_reserved_ip.squid_reserved_ip.reserved_ip
     }
-    subnet   = ibm_is_subnet.subnet_zone1_external.id
+    subnet   = ibm_is_subnet.squid_external_subnet.id
 }
 
 
@@ -164,12 +164,12 @@ resource "ibm_is_instance" "squid" {
 #   routing_table = "r010-9fa28615-fc2c-46f1-80ae-30df814ea1a1" # fix needed
 # }
 
-resource "ibm_is_vpn_server_route" "vpn_server_roks_api_route" {
-  vpn_server  = ibm_is_vpn_server.vpn_server.id
-  destination = "166.8.0.0/13" # Adjust CIDR to include the ROKS API server
-  action      = "deliver"
-  name        = "roks-api-route"
-}
+# resource "ibm_is_vpn_server_route" "vpn_server_roks_api_route" {
+#   vpn_server  = ibm_is_vpn_server.vpn_server.id
+#   destination = "166.8.0.0/13" # Adjust CIDR to include the ROKS API server
+#   action      = "deliver"
+#   name        = "roks-api-route"
+# }
 
 resource "ibm_is_security_group_rule" "vpn_server_outbound" {
   group     = tolist(ibm_is_vpn_server.vpn_server.security_groups)[0]
@@ -203,49 +203,14 @@ resource "ibm_is_vpc_routing_table_route" "to-vpc" {
   priority      = 2
 }
 
-
-resource "ibm_is_virtual_network_interface" "test_server_vni"{
-    name                            = "test-server-vni"
-    resource_group                  = data.ibm_resource_group.existing_resource_group.id
-    allow_ip_spoofing               = false
-    enable_infrastructure_nat       = true
-    primary_ip {
-        auto_delete       = true
-    }
-    subnet   = ibm_is_subnet.subnet_zone1_internal.id
-}
-
-resource "ibm_is_instance" "test-server" {
-  name                      = "test"
-  resource_group            = data.ibm_resource_group.existing_resource_group.id
-  vpc                       = data.ibm_is_vpc.existing_vpc.id
-  zone                      = "${var.region}-1"
-  image                     = data.ibm_is_image.ubuntu.id
-  profile                   = "cx2-2x4"
-  keys                      = [ibm_is_ssh_key.sshkey.id]
-
-  metadata_service {
-    enabled = false
-    protocol = "http"
-    response_hop_limit = 1
-  }
-
-  primary_network_attachment {
-    name = "test-server-primary-att"
-    virtual_network_interface {
-      id = ibm_is_virtual_network_interface.test_server_vni.id
-    }
-  }
-
-}
-
-#  resource "ibm_resource_instance" "secret_manager" {
-#      name               =  "${var.resource_prefix}-secrets-manager"
-#      resource_group_id  = data.ibm_resource_group.existing_resource_group.id
-#      service            = "secrets-manager"
-#      plan               = "standard"
-#      location           = var.region
-#  }
+# resource "ibm_is_vpc_routing_table_route" "to_squid_proxy" {
+#   vpc              = data.ibm_is_vpc.existing_vpc.id
+#   routing_table    = "r010-9ec0e62b-b0f3-4bef-93ca-3345b897d94a"
+#   zone             = "${var.region}-1"
+#   destination      = "10.30.20.5/32"
+#   next_hop         = "10.0.0.1"  # Ensure the correct next hop
+#   action           = "deliver"
+# }
 
 data "ibm_resource_instance" "existing_secret_manager" {
   name = var.secret_manager_instance
@@ -345,7 +310,7 @@ resource "ibm_is_vpn_server" "vpn_server" {
   enable_split_tunneling = true
   protocol               = "udp"
   port                   = 443
-  subnets                = [ibm_is_subnet.subnet_zone1_external.id]
+  subnets                = [ibm_is_subnet.squid_external_subnet.id]
   security_groups        = [data.ibm_is_vpc.existing_vpc.default_security_group]
 
   client_authentication {
@@ -373,15 +338,19 @@ resource "ibm_is_security_group_rule" "allow_incomming_for_vpn" {
 }
 
 
-output "vpn_server_certificate_crn" {
-  value = ibm_sm_private_certificate.vpn_server.crn
-}
+# output "vpn_server_certificate_crn" {
+#   value = ibm_sm_private_certificate.vpn_server.crn
+# }
 
 # output "vpn_routing_table"{
 #   value = ibm_is_vpc_routing_table.custom_rt.id
 # }
 
-output "subnet" {
- value =  ibm_is_subnet.subnet_zone1_internal.id
-}
+# output "subnet" {
+#  value =  ibm_is_subnet.subnet_zone1_internal.id
+# }
   # routing_table = ibm_is_vpc_routing_table.custom_rt.id
+
+# output "resource_group_name" {
+#   value = var.resource_group_name
+# }

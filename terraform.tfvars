@@ -1,7 +1,7 @@
 region = "eu-de"
-resource_group_name = "lzroks9-management-rg"
+resource_group_name = "lzroks12-management-rg"
 tags = [ "Production" ]
-resource_prefix = "lzroks9"
+resource_prefix = "lzroks12"
 resource_suffix = "firewall"
 ubuntu_image = "ibm-ubuntu-22-04-4-minimal-amd64-4"
 allowlist = [".ibm.com",".docker.com",".google.com", ]
