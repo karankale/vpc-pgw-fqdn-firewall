@@ -21,12 +21,11 @@ data "ibm_is_vpc" "existing_vpc" {
   identifier = var.vpc_id
 }
 
-
 resource "ibm_is_vpc_address_prefix" "address_prefix_zone_1" {
     name = "${var.resource_prefix}-address-prefix-${var.resource_suffix}-z1"
     zone = "${var.region}-1"
     vpc  = data.ibm_is_vpc.existing_vpc.id
-    cidr = "10.40.0.0/16"
+    cidr = "10.50.0.0/16"
 }
 
 # resource "ibm_is_subnet" "subnet_zone1_internal" {
@@ -52,9 +51,10 @@ resource "ibm_is_subnet" "squid_external_subnet" {
     name            = "${var.resource_prefix}-subnet-${var.resource_suffix}-z1-external"
     vpc             = data.ibm_is_vpc.existing_vpc.id
     zone            = "${var.region}-1"
-    ipv4_cidr_block = "10.40.10.0/24"
+    ipv4_cidr_block = "10.50.10.0/24"
     routing_table   = data.ibm_is_vpc.existing_vpc.default_routing_table
 }
+
 
 resource "ibm_is_public_gateway" "public_gateway" {
   name = "${var.resource_prefix}-public-gw-${var.resource_suffix}"
@@ -83,7 +83,7 @@ data "ibm_is_image" "ubuntu" {
 
 resource "ibm_is_subnet_reserved_ip" "squid_reserved_ip" {
     subnet      = ibm_is_subnet.squid_external_subnet.id
-    address     = "10.40.10.5"
+    address     = "10.50.10.5"
     name        = "squid-reserved-ip"
 }
 
@@ -99,6 +99,22 @@ resource "ibm_is_virtual_network_interface" "squid_vni"{
     subnet   = ibm_is_subnet.squid_external_subnet.id
 }
 
+
+resource "ibm_is_security_group" "squid_sg" {
+  name           = "squid-sg"
+  vpc            = data.ibm_is_vpc.existing_vpc.id
+  resource_group = data.ibm_resource_group.existing_resource_group.id
+}
+
+resource "ibm_is_security_group_rule" "squid_inbound_roks" {
+  group     = ibm_is_security_group.squid_sg.id
+  direction = "inbound"
+  remote    = "10.10.0.0/24" # ROKS cluster subnets
+  tcp {
+    port_min = 3128
+    port_max = 3128
+  }
+}
 
 resource "ibm_is_instance" "squid" {
   name                      = "squid"
